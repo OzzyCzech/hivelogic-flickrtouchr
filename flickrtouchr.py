@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #
-# FlickrTouchr - a simple python script to grab all your photos from flickr, 
-#                dump into a directory - organised into folders by set - 
+# FlickrTouchr - a simple python script to grab all your photos from flickr,
+#                dump into a directory - organised into folders by set -
 #                along with any favourites you have saved.
 #
 #                You can then sync the photos to an iPod touch.
@@ -11,7 +11,7 @@
 #
 # Original Author:	colm - AT - allcosts.net  - Colm MacCarthaigh - 2008-01-21
 #
-# Modified by:			Dan Benjamin - http://hivelogic.com										
+# Modified by:			Dan Benjamin - http://hivelogic.com
 #
 # License:       		Apache 2.0 - http://www.apache.org/licenses/LICENSE-2.0.html
 #
@@ -23,8 +23,11 @@ import urllib2
 import unicodedata
 import cPickle
 import hashlib
+import time
 import sys
 import os
+import argparse
+import xmltodict, json
 
 API_KEY       = "e224418b91b4af4e8cdb0564716fa9bd"
 SHARED_SECRET = "7cddb9c9716501a0"
@@ -54,14 +57,14 @@ def getfrob():
     try:
         # Make the request and extract the frob
         response = urllib2.urlopen(url)
-    
+
         # Parse the XML
         dom = xml.dom.minidom.parse(response)
 
         # get the frob
         frob = getText(dom.getElementsByTagName("frob")[0].childNodes)
 
-        # Free the DOM 
+        # Free the DOM
         dom.unlink()
 
         # Return the frob
@@ -89,7 +92,7 @@ def froblogin(frob, perms):
     print "automatically)."
     print
     print url
-    print 
+    print
     print "Waiting for you to press return"
 
     # We now have a login url, open it in a web-browser
@@ -101,7 +104,7 @@ def froblogin(frob, perms):
     # Now, try and retrieve a token
     string = SHARED_SECRET + "api_key" + API_KEY + "frob" + frob + "methodflickr.auth.getToken"
     hash   = hashlib.md5(string).hexdigest()
-    
+
     # Formulate the request
     url    = "https://api.flickr.com/services/rest/?method=flickr.auth.getToken"
     url   += "&api_key=" + API_KEY + "&frob=" + frob
@@ -111,7 +114,7 @@ def froblogin(frob, perms):
     try:
         # Make the request and extract the frob
         response = urllib2.urlopen(url)
-    
+
         # Parse the XML
         dom = xml.dom.minidom.parse(response)
 
@@ -127,17 +130,17 @@ def froblogin(frob, perms):
     except:
         raise Exception("Login failed")
 
-# 
+#
 # Sign an arbitrary flickr request with a token
-# 
+#
 def flickrsign(url, token):
     query  = urlparse.urlparse(url).query
     query += "&api_key=" + API_KEY + "&auth_token=" + token
-    params = query.split('&') 
+    params = query.split('&')
 
     # Create the string to hash
     string = SHARED_SECRET
-    
+
     # Sort the arguments alphabettically
     params.sort()
     for param in params:
@@ -146,63 +149,59 @@ def flickrsign(url, token):
 
     # Now, append the api_key, and the api_sig args
     url += "&api_key=" + API_KEY + "&auth_token=" + token + "&api_sig=" + hash
-    
+
     # Return the signed url
     return url
 
 #
+# Print photo details
+#
+def getphotometa(photoid):
+    detailurl   = "https://api.flickr.com/services/rest/?method=flickr.photos.getInfo&photo_id=" + photoid
+
+	# Sign the url
+    request = flickrsign(detailurl, config["token"])
+
+	# Make the request
+    response = urllib2.urlopen(request)
+    return xmltodict.parse(response, cdata_key='text', attr_prefix='')['rsp']['photo']
+
+#
 # Grab the photo from the server
 #
-def getphoto(id, token, filename):
+def getphoto(imgurl, filename):
     try:
-        # Contruct a request to find the sizes
-        url  = "https://api.flickr.com/services/rest/?method=flickr.photos.getSizes"
-        url += "&photo_id=" + id
-    
-        # Sign the request
-        url = flickrsign(url, token)
-    
-        # Make the request
-        response = urllib2.urlopen(url)
-        
-        # Parse the XML
-        dom = xml.dom.minidom.parse(response)
-
-        # Get the list of sizes
-        sizes =  dom.getElementsByTagName("size")
-
-        # Grab the original if it exists
-        allowedTags = ("Original", "Video Original", "Large")
-        if (sizes[-1].getAttribute("label") in allowedTags):
-          imgurl = sizes[-1].getAttribute("source")
-        else:
-          print "Failed to get original for photo id " + id
-
-
-        # Free the DOM memory
-        dom.unlink()
-
-        # Grab the image file
         response = urllib2.urlopen(imgurl)
         data = response.read()
-    
+
         # Save the file!
-        fh = open(filename, "w")
+        fh = open(filename, "wb")
         fh.write(data)
         fh.close()
 
         return filename
     except:
         print "Failed to retrieve photo id " + id
-    
+
 ######## Main Application ##########
 if __name__ == '__main__':
 
+    # parse arguments
+    try:
+        parser = argparse.ArgumentParser(prog='python flickrtouchr.py')
+        parser.add_argument('dir', help='root output directory')
+        parser.add_argument('--prefix', default="%Y/%m", help='prefix dirs by datetaken (default: %%Y/%%m)')
+        parser.add_argument('--skipsets', default=False, action='store_true', help='skip the photo sets names in structure')
+        parser.add_argument('--metadata', default=False, action='store_true', help='save photo metadata in json (slower)')
+        args = parser.parse_args()
+    except:
+        sys.exit(1)
+
     # The first, and only argument needs to be a directory
     try:
-        os.chdir(sys.argv[1])
+        os.chdir(args.dir)
     except:
-        print "usage: %s directory" % sys.argv[0] 
+        parser.print_help()
         sys.exit(1)
 
     # First things first, see if we have a cached user and auth-token
@@ -214,7 +213,7 @@ if __name__ == '__main__':
     # We don't - get a new one
     except:
         (user, token) = froblogin(getfrob(), "read")
-        config = { "version":1 , "user":user, "token":token }  
+        config = { "version":1 , "user":user, "token":token }
 
         # Save it for future use
         cache = open("touchr.frob.cache", "w")
@@ -228,7 +227,7 @@ if __name__ == '__main__':
 
     # get the result
     response = urllib2.urlopen(url)
-    
+
     # Parse the XML
     dom = xml.dom.minidom.parse(response)
 
@@ -236,6 +235,7 @@ if __name__ == '__main__':
     sets =  dom.getElementsByTagName("photoset")
 
     # For each set - create a url
+    print str(sets.length) + ' photo sets for processing...'
     urls = []
     for set in sets:
         pid = set.getAttribute("id")
@@ -244,11 +244,12 @@ if __name__ == '__main__':
 
         # Build the list of photos
         url   = "https://api.flickr.com/services/rest/?method=flickr.photosets.getPhotos"
+        url  += "&extras=date_taken,url_o,geo"
         url  += "&photoset_id=" + pid
 
         # Append to our list of urls
         urls.append( (url , dir) )
-    
+
     # Free the DOM memory
     dom.unlink()
 
@@ -261,19 +262,16 @@ if __name__ == '__main__':
     urls.append( (url, "Favourites") )
 
     # Time to get the photos
+    print 'Prepare photos to download...'
+    progress = 0
     inodes = {}
     for (url , dir) in urls:
-        # Create the directory
-        try:
-            os.makedirs(dir)
-        except:
-            pass
 
         # Get 500 results per page
         url += "&per_page=500"
         pages = page = 1
 
-        while page <= pages: 
+        while page <= pages:
             request = url + "&page=" + str(page)
 
             # Sign the url
@@ -291,33 +289,48 @@ if __name__ == '__main__':
             except IndexError:
                 pages = 0
 
+
             # Grab the photos
             for photo in dom.getElementsByTagName("photo"):
-                # Tell the user we're grabbing the file
+                # Grab the id, datetaken, original url
+                photoid = photo.getAttribute("id").encode("utf8")
+                datetaken = time.strptime(photo.getAttribute('datetaken').encode("utf8"), '%Y-%m-%d %H:%M:%S')
+                originalurl = photo.getAttribute('url_o').encode("utf8")
 
-                # Grab the id
-                photoid = photo.getAttribute("id")
+                # Decide about grabbing structure
+                fulldir = ''
+                if args.prefix: fulldir = time.strftime(args.prefix, datetaken)
+                if not args.skipsets: fulldir = fulldir + '/' + dir
 
-                # The target
-                target = dir + "/" + photoid + ".jpg"
+                # Create the directory
+                if not os.path.isdir(fulldir):
+                    try:
+                        os.makedirs(fulldir)
+                    except:
+                        pass
 
                 # Skip files that exist
+                target = fulldir + "/" + photoid + ".jpg"
                 if os.access(target, os.R_OK):
                     inodes[photoid] = target
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
                     continue
-                else:
-                    print ''
-                    print photo.getAttribute("title").encode("utf8") + " ... in set ... " + dir
-                
+
+                # Save metadata about file to json
+                metadata = fulldir + '/.' + photoid + ".json"
+                if args.metadata:
+                    with open(metadata, "wb") as outfile:
+                        json.dump(getphotometa(photoid), outfile, indent=2)
+
                 # Look it up in our dictionary of inodes first
                 if photoid in inodes and inodes[photoid] and os.access(inodes[photoid], os.R_OK):
                     # woo, we have it already, use a hard-link
                     os.link(inodes[photoid], target)
                 else:
-                    inodes[photoid] = getphoto(photo.getAttribute("id"), config["token"], target)
+                    # download photo and increase counter
+                    inodes[photoid] = getphoto(originalurl, target)
+                    progress = progress + 1
+                    sys.stdout.write("Download %d images ...\r" % (progress))
+                    sys.stdout.flush()
 
             # Move on the next page
             page = page + 1
-    print ""
