@@ -250,8 +250,9 @@ if __name__ == '__main__':
         dir = unicodedata.normalize('NFKD', dir.decode("utf-8", "ignore")).encode('ASCII', 'ignore') # Normalize to ASCII
 
         # Build the list of photos
+        # see https://www.flickr.com/services/api/flickr.photosets.getPhotos.html
         url   = "https://api.flickr.com/services/rest/?method=flickr.photosets.getPhotos"
-        url  += "&extras=date_taken,url_o,geo"
+        url  += "&extras=date_taken,url_o,original_format,geo"
         url  += "&photoset_id=" + pid
 
         # Append to our list of urls
@@ -262,7 +263,7 @@ if __name__ == '__main__':
 
     # Add the photos which are not in any set
     url  = "https://api.flickr.com/services/rest/?method=flickr.photos.getNotInSet"
-    url += "&extras=date_taken,url_o,geo"
+    url += "&extras=date_taken,url_o,original_format,geo"
     urls.append( (url, 'No Set') )
 
     # Add the user's Favourites
@@ -305,33 +306,20 @@ if __name__ == '__main__':
                 # Grab the id, datetaken, original url
                 photoid = photo.getAttribute("id").encode("utf8")
                 originalurl = photo.getAttribute('url_o').encode("utf8")
-                farm = photo.getAttribute('farm').encode("utf8")
-                server = photo.getAttribute('farm').encode("utf8")
-
-                # see https://www.flickr.com/services/api/misc.urls.html
-                if not originalurl:
-                    # https://farm{farm-id}.staticflickr.com/{server-id}/{id}_{o-secret}_o.(jpg|gif|png)
-                    originalurl = "https://farm%s.staticflickr.com/%s/%s_%s_o.%s" % (farm, sever, photoid, )
-
-                # TODO replace datetaken with upload date if missing
-                try:
-                    datetakenatr = photo.getAttribute('datetaken').encode("utf8")
-                    datetaken = time.strptime(datetakenatr, '%Y-%m-%d %H:%M:%S')
-                except:
-                    datetaken = time.localtime()
-                    logger.error('datetaken="' + datetakenatr + '" failed URL=' + originalurl + ' ID=' + photoid)
+                datetaken = time.strptime(photo.getAttribute('datetaken').encode("utf8"), '%Y-%m-%d %H:%M:%S')
+                media = photo.getAttribute('media').encode("utf8")
+                originalformat = photo.getAttribute('originalformat').encode("utf8")
 
                 # Decide about grabbing structure
                 fulldir = ''
                 if args.prefix:fulldir = time.strftime(args.prefix, datetaken)
                 if not args.skipsets: fulldir = fulldir + '/' + dir
 
-                # Create the directory
-                if not os.path.isdir(fulldir):
-                    os.makedirs(fulldir)
+                # Create the directory if not exists
+                if not os.path.isdir(fulldir): os.makedirs(fulldir)
 
                 # Skip files that exist
-                target = fulldir + "/" + photoid + ".jpg"
+                target = fulldir + "/" + photoid + "."
                 if os.access(target, os.R_OK):
                     inodes[photoid] = target
                     skip = skip +1
