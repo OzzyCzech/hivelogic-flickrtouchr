@@ -181,8 +181,9 @@ def getphoto(imgurl, filename):
         fh.close()
 
         return filename
-    except:
-        print "Failed to retrieve photo id " + id
+    except Exception as e:
+        print 'ERROR: Download ' + imgurl + ' to ' + filename
+        logger.error(e)
 
 ######## Main Application ##########
 if __name__ == '__main__':
@@ -260,12 +261,13 @@ if __name__ == '__main__':
     dom.unlink()
 
     # Add the photos which are not in any set
-    url   = "https://api.flickr.com/services/rest/?method=flickr.photos.getNotInSet"
-    urls.append( (url, "No Set") )
+    url  = "https://api.flickr.com/services/rest/?method=flickr.photos.getNotInSet"
+    url += "&extras=date_taken,url_o,geo"
+    urls.append( (url, 'No Set') )
 
     # Add the user's Favourites
-    url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
-    urls.append( (url, "Favourites") )
+    # url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
+    # urls.append( (url, "Favourites") )
 
     # Time to get the photos
     print 'Prepare photos to download...'
@@ -303,13 +305,21 @@ if __name__ == '__main__':
                 # Grab the id, datetaken, original url
                 photoid = photo.getAttribute("id").encode("utf8")
                 originalurl = photo.getAttribute('url_o').encode("utf8")
+                farm = photo.getAttribute('farm').encode("utf8")
+                server = photo.getAttribute('farm').encode("utf8")
 
+                # see https://www.flickr.com/services/api/misc.urls.html
+                if not originalurl:
+                    # https://farm{farm-id}.staticflickr.com/{server-id}/{id}_{o-secret}_o.(jpg|gif|png)
+                    originalurl = "https://farm%s.staticflickr.com/%s/%s_%s_o.%s" % (farm, sever, photoid, )
+
+                # TODO replace datetaken with upload date if missing
                 try:
                     datetakenatr = photo.getAttribute('datetaken').encode("utf8")
                     datetaken = time.strptime(datetakenatr, '%Y-%m-%d %H:%M:%S')
                 except:
-                    datetaken = time.time()
-                    logger.error('datetaken "' + datetakenatr + '" failed URL=' + originalurl + ' ID=' + photoid)
+                    datetaken = time.localtime()
+                    logger.error('datetaken="' + datetakenatr + '" failed URL=' + originalurl + ' ID=' + photoid)
 
                 # Decide about grabbing structure
                 fulldir = ''
@@ -319,8 +329,6 @@ if __name__ == '__main__':
                 # Create the directory
                 if not os.path.isdir(fulldir):
                     os.makedirs(fulldir)
-
-
 
                 # Skip files that exist
                 target = fulldir + "/" + photoid + ".jpg"
@@ -345,7 +353,7 @@ if __name__ == '__main__':
                         download = download + 1
                         logger.debug('download ' + originalurl  + ' => ' + target)
 
-                sys.stdout.write("Download %d images. Skip %d images...\r" % (download, skip))
+                sys.stdout.write("Download %d images. Skip %d existing images...\r" % (download, skip))
                 sys.stdout.flush()
 
             # Move on the next page
