@@ -267,8 +267,9 @@ if __name__ == '__main__':
     urls.append( (url, 'No Set') )
 
     # Add the user's Favourites
-    # url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
-    # urls.append( (url, "Favourites") )
+    url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
+    url += "&extras=date_taken,url_o,original_format,geo"
+    urls.append( (url, 'F-A-V-O-R-I-T-E-S') )
 
     # Time to get the photos
     print 'Prepare photos to download...'
@@ -310,11 +311,11 @@ if __name__ == '__main__':
                 media = photo.getAttribute('media').encode("utf8")
                 originalformat = photo.getAttribute('originalformat').encode("utf8")
 
-
                 # Decide about grabbing structure
                 fulldir = ''
                 if args.prefix:fulldir = time.strftime(args.prefix, datetaken)
                 if not args.skipsets: fulldir = fulldir + '/' + dir
+                if dir == 'F-A-V-O-R-I-T-E-S': fulldir = 'Favourites'
 
                 # Create the directory if not exists
                 if not os.path.isdir(fulldir): os.makedirs(fulldir)
