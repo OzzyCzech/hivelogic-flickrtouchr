@@ -27,6 +27,7 @@ import time
 import sys
 import os
 import argparse
+import logging
 import xmltodict, json
 
 API_KEY       = "e224418b91b4af4e8cdb0564716fa9bd"
@@ -186,13 +187,15 @@ def getphoto(imgurl, filename):
 ######## Main Application ##########
 if __name__ == '__main__':
 
+
     # parse arguments
     try:
         parser = argparse.ArgumentParser(prog='python flickrtouchr.py')
-        parser.add_argument('dir', help='root output directory')
-        parser.add_argument('--prefix', default="%Y/%m", help='prefix dirs by datetaken (default: %%Y/%%m)')
-        parser.add_argument('--skipsets', default=False, action='store_true', help='skip the photo sets names in structure')
-        parser.add_argument('--metadata', default=False, action='store_true', help='save photo metadata in json (slower)')
+        parser.add_argument("dir", help='root output directory')
+        parser.add_argument("-p", "--prefix", default="%Y/%m", help='prefix dirs by datetaken (default: %%Y/%%m)')
+        parser.add_argument("-s", "--skipsets", default=False, action='store_true', help='skip the photo sets names in structure')
+        parser.add_argument("-m", "--metadata", default=False, action='store_true', help='save photo metadata in json (slower)')
+        parser.add_argument("-l", "--log", default="WARNING", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the logging level")
         args = parser.parse_args()
     except:
         sys.exit(1)
@@ -203,6 +206,9 @@ if __name__ == '__main__':
     except:
         parser.print_help()
         sys.exit(1)
+
+    logging.basicConfig(filename='flickr.log', level=args.log, format='%(asctime)s %(levelname)s %(message)s')
+    logger = logging.getLogger(__name__)
 
     # First things first, see if we have a cached user and auth-token
     try:
@@ -263,7 +269,9 @@ if __name__ == '__main__':
 
     # Time to get the photos
     print 'Prepare photos to download...'
-    progress = 0
+
+    download = 0
+    skip = 0
     inodes = {}
     for (url , dir) in urls:
 
@@ -294,43 +302,51 @@ if __name__ == '__main__':
             for photo in dom.getElementsByTagName("photo"):
                 # Grab the id, datetaken, original url
                 photoid = photo.getAttribute("id").encode("utf8")
-                datetaken = time.strptime(photo.getAttribute('datetaken').encode("utf8"), '%Y-%m-%d %H:%M:%S')
                 originalurl = photo.getAttribute('url_o').encode("utf8")
+
+                try:
+                    datetakenatr = photo.getAttribute('datetaken').encode("utf8")
+                    datetaken = time.strptime(datetakenatr, '%Y-%m-%d %H:%M:%S')
+                except:
+                    datetaken = time.time()
+                    logger.error('datetaken "' + datetakenatr + '" failed URL=' + originalurl + ' ID=' + photoid)
 
                 # Decide about grabbing structure
                 fulldir = ''
-                if args.prefix: fulldir = time.strftime(args.prefix, datetaken)
+                if args.prefix:fulldir = time.strftime(args.prefix, datetaken)
                 if not args.skipsets: fulldir = fulldir + '/' + dir
 
                 # Create the directory
                 if not os.path.isdir(fulldir):
-                    try:
-                        os.makedirs(fulldir)
-                    except:
-                        pass
+                    os.makedirs(fulldir)
+
+
 
                 # Skip files that exist
                 target = fulldir + "/" + photoid + ".jpg"
                 if os.access(target, os.R_OK):
                     inodes[photoid] = target
-                    continue
-
-                # Save metadata about file to json
-                metadata = fulldir + '/.' + photoid + ".json"
-                if args.metadata:
-                    with open(metadata, "wb") as outfile:
-                        json.dump(getphotometa(photoid), outfile, indent=2)
-
-                # Look it up in our dictionary of inodes first
-                if photoid in inodes and inodes[photoid] and os.access(inodes[photoid], os.R_OK):
-                    # woo, we have it already, use a hard-link
-                    os.link(inodes[photoid], target)
+                    skip = skip +1
+                    logger.debug('photo ' + originalurl  + ' => ' + target + " already exitst")
                 else:
-                    # download photo and increase counter
-                    inodes[photoid] = getphoto(originalurl, target)
-                    progress = progress + 1
-                    sys.stdout.write("Download %d images ...\r" % (progress))
-                    sys.stdout.flush()
+                    # Save metadata about file to json
+                    metadata = fulldir + '/.' + photoid + ".json"
+                    if args.metadata:
+                        with open(metadata, "wb") as outfile:
+                            json.dump(getphotometa(photoid), outfile, indent=2)
+
+                    # Look it up in our dictionary of inodes first
+                    if photoid in inodes and inodes[photoid] and os.access(inodes[photoid], os.R_OK):
+                        # woo, we have it already, use a hard-link
+                        os.link(inodes[photoid], target)
+                    else:
+                        # download photo and increase counter
+                        inodes[photoid] = getphoto(originalurl, target)
+                        download = download + 1
+                        logger.debug('download ' + originalurl  + ' => ' + target)
+
+                sys.stdout.write("Download %d images. Skip %d images...\r" % (download, skip))
+                sys.stdout.flush()
 
             # Move on the next page
             page = page + 1
