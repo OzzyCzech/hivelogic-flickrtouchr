@@ -310,6 +310,7 @@ if __name__ == '__main__':
                 media = photo.getAttribute('media').encode("utf8")
                 originalformat = photo.getAttribute('originalformat').encode("utf8")
 
+
                 # Decide about grabbing structure
                 fulldir = ''
                 if args.prefix:fulldir = time.strftime(args.prefix, datetaken)
@@ -317,6 +318,12 @@ if __name__ == '__main__':
 
                 # Create the directory if not exists
                 if not os.path.isdir(fulldir): os.makedirs(fulldir)
+
+                # Skip videos (not supported now)
+                if media == 'video':
+                    logger.debug('Video id=' + photoid + ' ' + originalurl  + ' => ' + target + " ")
+                    continue;
+
 
                 # Skip files that exist
                 target = fulldir + "/" + photoid + "."
