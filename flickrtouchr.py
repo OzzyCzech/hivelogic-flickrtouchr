@@ -269,7 +269,7 @@ if __name__ == '__main__':
     urls.append((url, 'No Set'))
 
     # Add the user's Favourites
-    if arg.favorites:
+    if args.favorites:
         url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
         url += "&extras=date_taken,url_o,original_format,geo"
         urls.append((url, 'F-A-V-O-R-I-T-E-S'))
