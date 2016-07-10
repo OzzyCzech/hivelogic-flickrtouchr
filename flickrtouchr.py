@@ -196,7 +196,9 @@ if __name__ == '__main__':
         parser.add_argument("-p", "--prefix", default="%Y/%m", help='prefix dirs by datetaken (default: %%Y/%%m)')
         parser.add_argument("-s", "--skipsets", default=False, action='store_true', help='skip the photo sets names in structure')
         parser.add_argument("-m", "--metadata", default=False, action='store_true', help='save photo metadata in json (slower)')
+        parser.add_argument("-f", "--favorites", default=False, action='store_true', help="download also favorites")
         parser.add_argument("-l", "--log", default="WARNING", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the logging level")
+
         args = parser.parse_args()
     except:
         sys.exit(1)
@@ -264,12 +266,13 @@ if __name__ == '__main__':
     # Add the photos which are not in any set
     url  = "https://api.flickr.com/services/rest/?method=flickr.photos.getNotInSet"
     url += "&extras=date_taken,url_o,original_format,geo"
-    urls.append( (url, 'No Set') )
+    urls.append((url, 'No Set'))
 
     # Add the user's Favourites
-    url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
-    url += "&extras=date_taken,url_o,original_format,geo"
-    urls.append( (url, 'F-A-V-O-R-I-T-E-S') )
+    if arg.favorites:
+        url   = "https://api.flickr.com/services/rest/?method=flickr.favorites.getList"
+        url += "&extras=date_taken,url_o,original_format,geo"
+        urls.append((url, 'F-A-V-O-R-I-T-E-S'))
 
     # Time to get the photos
     print 'Prepare photos to download...'
@@ -311,6 +314,11 @@ if __name__ == '__main__':
                 media = photo.getAttribute('media').encode("utf8")
                 originalformat = photo.getAttribute('originalformat').encode("utf8")
 
+                # some images don't have originalurl
+                if not originalurl:
+                    logger.debug('Image id=' + photoid + ' originalurl missing')
+                    continue
+
                 # Decide about grabbing structure
                 fulldir = ''
                 if args.prefix:fulldir = time.strftime(args.prefix, datetaken)
@@ -320,14 +328,15 @@ if __name__ == '__main__':
                 # Create the directory if not exists
                 if not os.path.isdir(fulldir): os.makedirs(fulldir)
 
+                # target photo, video
+                target = fulldir + "/" + photoid + "." + originalformat
+
                 # Skip videos (not supported now)
                 if media == 'video':
                     logger.debug('Video id=' + photoid + ' ' + originalurl  + ' => ' + target + " ")
-                    continue;
-
+                    continue
 
                 # Skip files that exist
-                target = fulldir + "/" + photoid + "."
                 if os.access(target, os.R_OK):
                     inodes[photoid] = target
                     skip = skip +1
